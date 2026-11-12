@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Detector de gas y humo</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#ffc2da">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Detector">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --fondo: #ffe6f0; --texto: #3b2f4a; --suave: #7b6d8d; --blanco: #ffffff;
+    --gas: #3aa6d8; --humo: #a672d0; --temp: #f08a3c;
+    --borde-gas: #8fd3f2; --borde-humo: #c9b0e8; --borde-temp: #ffa9a0; --borde-vent: #8fc3f2;
+    --borde-graf: #7fd6a4; --borde-temp-graf: #ffc58a; --borde-ev: #c9b0e8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--texto); line-height: 1.35;
+    font-family: "Nunito", ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, sans-serif;
+    background-color: var(--fondo);
+    background-image: radial-gradient(#ffd0e1 2px, transparent 2.5px), radial-gradient(#ffd0e1 2px, transparent 2.5px);
+    background-size: 36px 36px; background-position: 0 0, 18px 18px;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 14px; display: grid; gap: 14px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  h1 { font-size: 1.5rem; margin: 0; font-weight: 900; display: flex; align-items: center; gap: 8px; }
+  h1 svg { width: 38px; height: 38px; }
+  h2 { font-size: 1.05rem; margin: 0 0 8px; font-weight: 800; }
+  .acciones { display: flex; align-items: center; gap: 10px; }
+
+  .pill { font-size: .85rem; font-weight: 800; padding: 5px 14px; border-radius: 999px; background: #ece6f2;
+          border: 3px solid #cbbfdc; color: #5b4d6e; }
+  .pill.ok { background: #d7f5e3; border-color: #7fd6a4; color: #1f6a45; }
+  .pill.mal { background: #ffd5d9; border-color: #f08a98; color: #8c1328; }
+  .pill.aviso { background: #ffe8c9; border-color: #f2b469; color: #7a4a00; }
+
+  /* ---- Estado ---- */
+  .estado { display: flex; align-items: center; gap: 14px; padding: 12px 20px 12px 12px; border-radius: 26px;
+            border: 4px solid #a99bbd; background: #ece6f2; color: #4b3f5e;
+            box-shadow: 0 4px 0 rgba(80, 40, 90, .08); }
+  .estado .mascota { width: 118px; height: 108px; flex: none; }
+  .estado .texto { flex: 1; text-align: center; }
+  .estado .grande { font-size: 2rem; font-weight: 900; letter-spacing: .5px; }
+  .estado .ayuda { font-weight: 700; margin-top: 2px; }
+  .estado.NORMAL    { background: #d7f5e3; border-color: #4cb782; color: #1f5b3f; }
+  .estado.ESPERA    { background: #ffe8c9; border-color: #f2a03d; color: #7a4a00; }
+  .estado.ALARMA    { background: #ffd5d9; border-color: #e4576b; color: #8c1328; animation: latido 1s infinite; }
+  .estado.BLOQUEADO { background: #fff3b8; border-color: #e2b400; color: #5c4800; }
+  @keyframes latido { 50% { transform: scale(1.015); filter: brightness(1.05); } }
+  .cara { display: none; }
+  .estado.NORMAL .cara-normal, .estado.ESPERA .cara-espera, .estado.ALARMA .cara-alarma,
+  .estado.BLOQUEADO .cara-bloqueado { display: inline; }
+  .estado:not(.NORMAL):not(.ESPERA):not(.ALARMA):not(.BLOQUEADO) .cara-nada { display: inline; }
+
+  /* ---- Tarjetas ---- */
+  .tarjetas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .tarjeta, .panel { background: var(--blanco); border: 4px solid #e4dcef; border-radius: 24px; padding: 12px 14px;
+                     box-shadow: 0 4px 0 rgba(80, 40, 90, .07); }
+  .tarjeta { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .tarjeta.gas { border-color: var(--borde-gas); } .tarjeta.humo { border-color: var(--borde-humo); }
+  .tarjeta.temp { border-color: var(--borde-temp); }
+  .tarjeta .nombre { font-weight: 800; }
+  .tarjeta .valor { font-size: 2rem; font-weight: 900; line-height: 1.1; }
+  .tarjeta .valor small { font-size: 1rem; font-weight: 800; color: var(--suave); }
+  .tarjeta .detalle { color: var(--suave); font-size: .78rem; font-weight: 700; }
+  .tarjeta svg { width: 64px; height: 64px; flex: none; }
+
+  /* ---- Ventilador ---- */
+  .control { border-color: var(--borde-vent); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .control .info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 220px; }
+  .control .nombre { font-weight: 800; }
+  .control .valor { font-size: 1.35rem; font-weight: 900; }
+  .control .nota { margin: 2px 0 0; min-height: 1.2em; color: var(--suave); font-size: .82rem; font-weight: 700; }
+  .ventilador-ico { width: 62px; height: 62px; flex: none; }
+  .aspas { transform-box: view-box; transform-origin: 32px 30px; }
+  .control.encendido .aspas { animation: giro .6s linear infinite; }
+  @keyframes giro { to { transform: rotate(360deg); } }
+  .zzz { font-weight: 900; color: #7ba7d6; font-size: 1.1rem; letter-spacing: 1px; }
+  .control.encendido .zzz { display: none; }
+
+  .controles { display: grid; grid-template-columns: 3fr 2fr; gap: 12px; }
+  .valvula { border-color: #ffc58a; display: flex; align-items: center; gap: 12px; }
+  .valv-ico { width: 72px; height: 62px; flex: none; }
+  .valvula .nombre { font-weight: 800; }
+  .valvula .valor { font-size: 1.35rem; font-weight: 900; }
+  .valvula .nota { margin: 2px 0 0; min-height: 1.2em; color: var(--suave); font-size: .82rem; font-weight: 700; }
+  .valv-cuerpo { fill: #c9f0d6; stroke: #4cb782; }
+  .valvula.cerrada { border-color: #f08a98; }
+  .valvula.cerrada .valv-cuerpo { fill: #ffd5d9; stroke: #e4576b; }
+  .valvula.cerrada .valor { color: #8c1328; }
+  .valvula .v-cerrada, .valvula.cerrada .v-abierta { display: none; }
+  .valvula.cerrada .v-cerrada { display: inline; }
+  button { font: inherit; font-weight: 800; padding: 10px 18px; border-radius: 999px; cursor: pointer;
+           border: 3px solid #cbbfdc; background: #fff; color: var(--texto); }
+  button.principal { background: #c6e5ff; border-color: #6fb0ea; color: #1c4a7a; }
+  button:hover:not(:disabled) { filter: brightness(1.04); transform: translateY(-1px); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #7a5cff; outline-offset: 2px; }
+  .icono { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; border-radius: 999px; }
+  .icono svg { width: 22px; height: 22px; fill: none; stroke: var(--texto); stroke-width: 2;
+               stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---- Gráficos ---- */
+  .graficos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .graf-gh { border-color: var(--borde-graf); } .graf-t { border-color: var(--borde-temp-graf); }
+  canvas { width: 100%; height: 200px; display: block; }
+  .leyenda { display: flex; gap: 12px; flex-wrap: wrap; color: var(--suave); font-size: .8rem; font-weight: 700; margin-top: 4px; }
+  .leyenda i { display: inline-block; width: 14px; height: 6px; border-radius: 3px; margin-right: 5px; vertical-align: middle; }
+
+  /* ---- Historial de incidentes ---- */
+  .eventos { border-color: var(--borde-ev); background: #f7f1ff; }
+  .cab-hist { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .cab-hist h2 { margin: 0; }
+  button.chico { padding: 5px 12px; font-size: .8rem; }
+  .tabla-caja { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-weight: 700; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-size: .78rem; color: var(--suave); padding: 6px 8px; border-bottom: 3px solid #e1d5f2; white-space: nowrap; }
+  td { padding: 8px; border-bottom: 2px dashed #e1d5f2; white-space: nowrap; }
+  tr.curso td { background: #ffe1e5; }
+  tr.curso td:first-child { border-radius: 12px 0 0 12px; } tr.curso td:last-child { border-radius: 0 12px 12px 0; }
+  #vacioInc { margin: 10px 0 2px; color: var(--suave); font-weight: 700; }
+  .chip { font-size: .78rem; font-weight: 900; padding: 2px 10px; border-radius: 999px; border: 2px solid; }
+  .chip.GAS  { background: #d9f1fc; border-color: #5bb5dd; color: #11516f; }
+  .chip.HUMO { background: #ece6f5; border-color: #9b8fb3; color: #4b3a6b; }
+  .chip.GH   { background: #ffe8c9; border-color: #f2a03d; color: #7a4a00; }
+  .chip.CURSO { background: #ffd5d9; border-color: #e4576b; color: #8c1328; margin-left: 6px; }
+
+  /* ---- Ventana de configuración ---- */
+  .instalar { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 12px;
+    background: #fff4f9; border: 3px dashed #f3a6c6; border-radius: 18px; font-weight: 700; color: var(--texto); }
+  .instalar img { border-radius: 12px; flex: none; }
+  .instalar span { flex: 1; font-size: 14px; }
+  .instalar[hidden] { display: none; }
+  dialog { border: 4px solid #c9b0e8; border-radius: 28px; padding: 18px; width: min(580px, calc(100% - 24px));
+           color: var(--texto); background: #fff; box-shadow: 0 14px 40px rgba(60, 20, 80, .35); }
+  dialog::backdrop { background: rgba(90, 40, 110, .45); }
+  .dialogo-cab { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .dialogo-cab h2 { margin: 0; font-size: 1.15rem; font-weight: 900; }
+  form .fila { display: grid; grid-template-columns: 1fr auto 150px; gap: 10px; align-items: center;
+               padding: 8px 0; border-top: 2px dashed #e1d5f2; font-weight: 700; }
+  form .fila:first-of-type { border-top: 0; }
+  form .actual { color: var(--suave); font-size: .85rem; }
+  input[type=number] { width: 100%; padding: 8px 10px; font: inherit; font-weight: 700; border: 3px solid #e1d5f2;
+                       border-radius: 14px; }
+  .botones { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+  #resultado { color: var(--suave); font-size: .9rem; font-weight: 700; }
+  .nota { color: var(--suave); font-size: .85rem; font-weight: 700; margin: 10px 0 0; }
+
+  @media (max-width: 720px) {
+    .tarjetas, .graficos, .controles { grid-template-columns: 1fr; }
+    .estado .mascota { width: 84px; height: 78px; }
+    .estado .grande { font-size: 1.45rem; }
+    form .fila { grid-template-columns: 1fr 110px; }
+    form .actual { grid-column: 1 / -1; order: 3; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .estado.ALARMA, .control.encendido .aspas { animation: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>
+      <svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="9" cy="17" r="5" fill="#c99a68" stroke="#8a5a35" stroke-width="2.5"/><circle cx="31" cy="17" r="5" fill="#c99a68" stroke="#8a5a35" stroke-width="2.5"/><circle cx="20" cy="24" r="15" fill="#d6a673" stroke="#8a5a35" stroke-width="3"/><circle cx="20" cy="9" r="5" fill="#ffb84a" stroke="#d9822b" stroke-width="2"/><ellipse cx="20" cy="30" rx="9" ry="6.5" fill="#ebc9a0" stroke="#8a5a35" stroke-width="2"/><circle cx="12.5" cy="23" r="2.3" fill="#2b2b3a"/><circle cx="27.5" cy="23" r="2.3" fill="#2b2b3a"/><ellipse cx="17" cy="28" rx="1.2" ry="1.6" fill="#5a3820"/><ellipse cx="23" cy="28" rx="1.2" ry="1.6" fill="#5a3820"/></svg>
+      Detector de gas y humo
+    </h1>
+    <div class="acciones">
+      <span id="conexion" class="pill">Conectando...</span>
+      <button id="btnConfig" class="icono" type="button" aria-label="Configuración" title="Configuración">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <section id="estado" class="estado">
+    <svg class="mascota" viewBox="0 0 120 110" aria-hidden="true">
+      <!-- orejas -->
+      <circle cx="27" cy="47" r="8" fill="#c99a68" stroke="#8a5a35" stroke-width="3.5"/><circle cx="27" cy="48" r="3.5" fill="#f0b9a3"/>
+      <circle cx="93" cy="47" r="8" fill="#c99a68" stroke="#8a5a35" stroke-width="3.5"/><circle cx="93" cy="48" r="3.5" fill="#f0b9a3"/>
+      <!-- cabeza y cuerpo -->
+      <path d="M12 102Q8 58 26 47Q60 38 94 47Q112 58 108 102Z" fill="#d6a673" stroke="#8a5a35" stroke-width="4" stroke-linejoin="round"/>
+      <!-- yuzu en la cabeza -->
+      <circle cx="60" cy="33" r="10" fill="#ffb84a" stroke="#d9822b" stroke-width="3"/>
+      <path d="M60 23q2-8 9-8q-1 7-9 8z" fill="#6cc48a" stroke="#2e8b62" stroke-width="2" stroke-linejoin="round"/>
+      <!-- hocico -->
+      <rect x="31" y="71" width="58" height="30" rx="15" fill="#ebc9a0" stroke="#8a5a35" stroke-width="3.5"/>
+      <rect x="46" y="74" width="28" height="12" rx="6" fill="#6b4226"/>
+      <ellipse cx="54" cy="80" rx="2.2" ry="2.8" fill="#2b1a0e"/><ellipse cx="66" cy="80" rx="2.2" ry="2.8" fill="#2b1a0e"/>
+      <ellipse cx="24" cy="72" rx="7" ry="4.5" fill="#ff9eb5" opacity=".75"/><ellipse cx="96" cy="72" rx="7" ry="4.5" fill="#ff9eb5" opacity=".75"/>
+      <!-- normal: guiño -->
+      <g class="cara cara-normal">
+        <circle cx="40" cy="62" r="4.8" fill="#2b2b3a"/><circle cx="41.6" cy="60.4" r="1.6" fill="#fff"/>
+        <path d="M74 63q6-7 12 0" fill="none" stroke="#2b2b3a" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M52 90q8 7 16 0" fill="none" stroke="#5a3820" stroke-width="3.5" stroke-linecap="round"/>
+      </g>
+      <!-- espera: preocupado -->
+      <g class="cara cara-espera">
+        <circle cx="40" cy="62" r="4.8" fill="#2b2b3a"/><circle cx="42.5" cy="62" r="1.6" fill="#fff"/>
+        <circle cx="80" cy="62" r="4.8" fill="#2b2b3a"/><circle cx="82.5" cy="62" r="1.6" fill="#fff"/>
+        <path d="M32 52l14-4 M88 52l-14-4" stroke="#2b2b3a" stroke-width="3" stroke-linecap="round"/>
+        <path d="M52 93q4-5 8 0t8 0" fill="none" stroke="#5a3820" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M100 44q5 8 0 11q-5-3 0-11z" fill="#8fd3f2" stroke="#3aa6d8" stroke-width="2"/>
+      </g>
+      <!-- alarma: asustado -->
+      <g class="cara cara-alarma">
+        <circle cx="40" cy="60" r="7.5" fill="#fff" stroke="#2b2b3a" stroke-width="3"/><circle cx="40" cy="61" r="3.3" fill="#2b2b3a"/>
+        <circle cx="80" cy="60" r="7.5" fill="#fff" stroke="#2b2b3a" stroke-width="3"/><circle cx="80" cy="61" r="3.3" fill="#2b2b3a"/>
+        <ellipse cx="60" cy="93" rx="6" ry="5.5" fill="#8c1328" stroke="#5a3820" stroke-width="3"/>
+        <path d="M18 36l-8-6 M102 36l8-6 M60 14v-8" stroke="#e4576b" stroke-width="4" stroke-linecap="round"/>
+      </g>
+      <!-- bloqueado: dormidito con candado -->
+      <g class="cara cara-bloqueado">
+        <path d="M34 63q6 6 12 0 M74 63q6 6 12 0" fill="none" stroke="#2b2b3a" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M54 92h12" stroke="#5a3820" stroke-width="3.5" stroke-linecap="round"/>
+        <rect x="92" y="10" width="22" height="18" rx="4" fill="#ffd84a" stroke="#b08900" stroke-width="3"/>
+        <path d="M97 10v-4a6 6 0 0 1 12 0v4" fill="none" stroke="#b08900" stroke-width="3"/>
+      </g>
+      <!-- sin datos -->
+      <g class="cara cara-nada">
+        <path d="M35 57l10 10 M45 57l-10 10 M75 57l10 10 M85 57l-10 10" stroke="#2b2b3a" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M52 92h16" stroke="#5a3820" stroke-width="3.5" stroke-linecap="round"/>
+      </g>
+    </svg>
+    <div class="texto">
+      <div class="grande" id="estadoTxt">SIN DATOS</div>
+      <div class="ayuda" id="estadoAyuda">Esperando datos del equipo...</div>
+    </div>
+  </section>
+
+  <section class="tarjetas">
+    <div class="tarjeta gas">
+      <div><div class="nombre">Gas (MQ-5)</div>
+        <div class="valor"><span id="vGas">--</span> <small>V</small></div>
+        <div class="detalle">sobre el aire limpio</div></div>
+      <svg viewBox="0 0 64 64" aria-hidden="true"><g fill="#d9f1fc" stroke="#5bb5dd" stroke-width="3" stroke-linejoin="round"><circle cx="20" cy="38" r="12"/><circle cx="34" cy="28" r="15"/><circle cx="47" cy="38" r="11"/><rect x="14" y="38" width="40" height="12" rx="6" stroke="none"/></g><path d="M14 50h40" stroke="#5bb5dd" stroke-width="3" stroke-linecap="round"/><circle cx="28" cy="38" r="2.3" fill="#2b2b3a"/><circle cx="41" cy="38" r="2.3" fill="#2b2b3a"/><path d="M31 43q3 3 6 0" fill="none" stroke="#2b2b3a" stroke-width="2" stroke-linecap="round"/></svg>
+    </div>
+    <div class="tarjeta humo">
+      <div><div class="nombre">Humo (MQ-2)</div>
+        <div class="valor"><span id="vHumo">--</span> <small>V</small></div>
+        <div class="detalle">sobre el aire limpio</div></div>
+      <svg viewBox="0 0 64 64" aria-hidden="true"><g fill="#ece6f5" stroke="#9b8fb3" stroke-width="3" stroke-linejoin="round"><circle cx="22" cy="26" r="11"/><circle cx="34" cy="20" r="12"/><circle cx="45" cy="28" r="10"/><rect x="18" y="28" width="32" height="10" rx="5" stroke="none"/></g><rect x="24" y="44" width="16" height="14" rx="3" fill="#e9a77a" stroke="#b9724a" stroke-width="3"/><circle cx="29" cy="30" r="2.2" fill="#2b2b3a"/><circle cx="40" cy="30" r="2.2" fill="#2b2b3a"/><path d="M31 34q3 3 6 0" fill="none" stroke="#2b2b3a" stroke-width="2" stroke-linecap="round"/></svg>
+    </div>
+    <div class="tarjeta temp">
+      <div><div class="nombre">Temperatura</div>
+        <div class="valor"><span id="vTemp">--</span> <small>°C</small></div>
+        <div class="detalle">sensor DS18B20</div></div>
+      <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="24" y="6" width="16" height="38" rx="8" fill="#fff" stroke="#e0736a" stroke-width="3"/><circle cx="32" cy="48" r="11" fill="#ff8f86" stroke="#e0736a" stroke-width="3"/><rect x="29" y="22" width="6" height="26" rx="3" fill="#ff8f86"/><path d="M44 14h6 M44 22h4 M44 30h6" stroke="#e0736a" stroke-width="2.5" stroke-linecap="round"/><circle cx="29" cy="49" r="1.6" fill="#2b2b3a"/><circle cx="35" cy="49" r="1.6" fill="#2b2b3a"/></svg>
+    </div>
+  </section>
+
+  <section class="controles">
+  <div id="ventCard" class="panel control">
+    <div class="info">
+      <svg class="ventilador-ico" viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="30" r="25" fill="#eaf5ff" stroke="#4a90d9" stroke-width="3"/>
+        <g class="aspas">
+          <ellipse cx="32" cy="16" rx="6.5" ry="11" fill="#9fd0f7" stroke="#4a90d9" stroke-width="2"/>
+          <ellipse cx="32" cy="16" rx="6.5" ry="11" fill="#9fd0f7" stroke="#4a90d9" stroke-width="2" transform="rotate(120 32 30)"/>
+          <ellipse cx="32" cy="16" rx="6.5" ry="11" fill="#9fd0f7" stroke="#4a90d9" stroke-width="2" transform="rotate(240 32 30)"/>
+        </g>
+        <circle cx="32" cy="30" r="4.5" fill="#4a90d9"/>
+        <rect x="28" y="55" width="8" height="5" fill="#4a90d9"/><rect x="19" y="59" width="26" height="4" rx="2" fill="#4a90d9"/>
+      </svg>
+      <div>
+        <div class="nombre">Ventilador</div>
+        <div class="valor" id="ventEstado">--</div>
+        <p class="nota" id="ventNota"></p>
+      </div>
+      <span class="zzz" aria-hidden="true">z z Z</span>
+    </div>
+    <button id="btnVentilador" class="principal" type="button" disabled>Encender ventilador</button>
+  </div>
+
+  <div id="valvCard" class="panel valvula">
+    <svg class="valv-ico" viewBox="0 0 72 62" aria-hidden="true">
+      <rect x="2" y="32" width="22" height="14" rx="3" fill="#dfe6ef" stroke="#7b8aa0" stroke-width="3"/>
+      <rect x="48" y="32" width="22" height="14" rx="3" fill="#dfe6ef" stroke="#7b8aa0" stroke-width="3"/>
+      <rect x="22" y="22" width="28" height="34" rx="8" class="valv-cuerpo" stroke-width="3"/>
+      <rect x="33" y="11" width="6" height="11" fill="#d9822b"/>
+      <rect x="20" y="5" width="32" height="7" rx="3.5" fill="#ff9a8f" stroke="#e0736a" stroke-width="2.5"/>
+      <g class="v-abierta" fill="none" stroke="#2f8f63" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M29 40l5 5 9-10"/></g>
+      <g class="v-cerrada" fill="none" stroke="#c43a4e" stroke-width="3.5" stroke-linecap="round"><path d="M30 34l12 12 M42 34l-12 12"/></g>
+    </svg>
+    <div>
+      <div class="nombre">Electroválvula</div>
+      <div class="valor" id="valvEstado">--</div>
+      <p class="nota" id="valvNota"></p>
+    </div>
+  </div>
+</section>
+
+  <section class="graficos">
+    <div class="panel graf-gh">
+      <h2>Gas y humo (V)</h2>
+      <canvas id="graficoGH" role="img" aria-label="Gráfico de gas y humo en el tiempo"></canvas>
+      <div class="leyenda">
+        <span><i style="background:var(--gas)"></i>Gas</span>
+        <span><i style="background:var(--humo)"></i>Humo</span>
+        <span>Punteadas: umbrales de alarma</span>
+      </div>
+    </div>
+    <div class="panel graf-t">
+      <h2>Temperatura (°C)</h2>
+      <canvas id="graficoT" role="img" aria-label="Gráfico de temperatura en el tiempo"></canvas>
+    </div>
+  </section>
+
+  <section class="panel eventos">
+    <div class="cab-hist">
+      <h2>Historial de incidentes</h2>
+      <button id="btnBorrar" class="chico" type="button">Borrar historial</button>
+    </div>
+    <div class="tabla-caja">
+      <table>
+        <thead><tr><th>#</th><th>Fecha y hora</th><th>Tipo</th><th>Duración</th><th>Pico (V)</th><th>Temp. (°C)</th></tr></thead>
+        <tbody id="cuerpoInc"></tbody>
+      </table>
+    </div>
+    <p id="vacioInc">Sin incidentes registrados.</p>
+  </section>
+</main>
+
+<dialog id="dlgConfig" aria-labelledby="dlgTitulo">
+  <div class="dialogo-cab">
+    <h2 id="dlgTitulo">Configuración del equipo</h2>
+    <button id="btnCerrar" class="icono" type="button" aria-label="Cerrar">✕</button>
+  </div>
+  <form id="formulario"></form>
+  <div id="bloqueInstalar" class="instalar" hidden>
+    <img src="icon-192.png" alt="" width="44" height="44">
+    <span id="txtInstalar">Instala la app en tu celular.</span>
+    <button id="btnInstalar" type="button" class="principal">Instalar app</button>
+  </div>
+  <p class="nota">Rearmar la válvula solo se puede en el equipo (pantalla táctil, pestaña CONF).</p>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5/dist/mqtt.min.js"></script>
+<script>
+// ================== CONFIGURACIÓN ==================
+const BROKER_URL = "wss://broker.hivemq.com:8884/mqtt";   // el mismo broker de la Pico, por WebSocket
+const BASE = "mariana_detector_x7k2";                      // tiene que ser igual al BASE de la Pico
+const TEMA_DATOS = BASE + "/telemetry";                    // la Pico publica aquí
+const TEMA_CMD = BASE + "/cmd";                            // la Pico escucha aquí
+const MAX_PUNTOS = 120;                                    // puntos del gráfico (1 por segundo)
+const SIN_DATOS_MS = 5000;                                 // si pasan 5 s sin mensajes, avisa
+
+// Parámetros que se pueden cambiar (mismas claves que entiende la Pico)
+const CAMPOS = [
+  { clave: "umbral_gas",    etiqueta: "Umbral de gas",               unidad: "V", paso: 0.01, min: 0.10, max: 2.0 },
+  { clave: "umbral_humo",   etiqueta: "Umbral de humo",              unidad: "V", paso: 0.01, min: 0.10, max: 2.0 },
+  { clave: "umbral_normal", etiqueta: "Umbral para volver a normal", unidad: "V", paso: 0.01, min: 0.05, max: 2.0 },
+  { clave: "espera",        etiqueta: "Espera antes de la alarma",   unidad: "s", paso: 1,    min: 1,    max: 30  },
+  { clave: "naranja",       etiqueta: "Aviso naranja",               unidad: "s", paso: 1,    min: 0,    max: 29  },
+];
+const DEFECTOS = { umbral_gas: 0.30, umbral_humo: 0.30, umbral_normal: 0.15, espera: 5, naranja: 2 };
+
+const AYUDA_ESTADO = {
+  NORMAL:    "Todo en orden.",
+  ESPERA:    "Posible fuga: confirmando antes de activar la alarma.",
+  ALARMA:    "Ventilador encendido y válvula cerrada.",
+  BLOQUEADO: "Aire limpio, pero la válvula sigue cerrada. Hay que rearmarla en el equipo.",
+};
+
+// ================== DATOS EN MEMORIA ==================
+const histGas = [], histHumo = [], histTemp = [];
+let ultimoMensaje = 0;        // hora del último mensaje recibido
+let config = null;            // última configuración informada por el equipo
+let envio = null;             // { cmd, hora } del último comando enviado
+let ventiladorOn = false;     // estado real del ventilador, según el equipo
+let editado = false;          // true si el usuario tocó los campos de configuración
+
+const $ = (id) => document.getElementById(id);
+
+// ================== CONEXIÓN MQTT ==================
+const cliente = mqtt.connect(BROKER_URL, {
+  clientId: "web_" + Math.random().toString(16).slice(2, 8),
+  reconnectPeriod: 3000,
+});
+
+cliente.on("connect", () => {
+  cliente.subscribe(TEMA_DATOS);          // la web es un suscriptor más, como MQTTX
+  actualizarConexion();
+});
+cliente.on("close", actualizarConexion);
+
+cliente.on("message", (tema, payload) => {
+  let datos;
+  try { datos = JSON.parse(payload.toString()); } catch (e) { return; }   // ignora lo que no sea JSON
+  if (datos && typeof datos === "object") recibir(datos);
+});
+
+// ================== AL LLEGAR UN MENSAJE ==================
+function recibir(d) {
+  ultimoMensaje = Date.now();
+
+  $("vGas").textContent  = num(d.gas, 2);
+  $("vHumo").textContent = num(d.humo, 2);
+  $("vTemp").textContent = num(d.temp, 1);
+
+  push(histGas, d.gas); push(histHumo, d.humo); push(histTemp, d.temp);
+
+  mostrarEstado(d.estado);
+  mostrarVentilador(d);
+  mostrarValvula(d);
+  actualizarHistorial(d);
+
+  if (CAMPOS.every(c => typeof d[c.clave] === "number")) recibirConfig(d);
+
+  dibujarGraficos(d);
+  actualizarConexion();
+}
+
+function recibirConfig(d) {
+  const primera = (config === null);
+  config = {};
+  CAMPOS.forEach(c => { config[c.clave] = d[c.clave]; $("actual_" + c.clave).textContent = "En el equipo: " + d[c.clave] + " " + c.unidad; });
+  if (primera) CAMPOS.forEach(c => { $("in_" + c.clave).value = d[c.clave]; });   // rellena los campos al inicio
+
+  // ¿ya respondió el equipo al último comando?
+  if (envio && Date.now() - envio.hora > 1500) {
+    const igual = CAMPOS.every(c => Math.abs(config[c.clave] - envio.cmd[c.clave]) < 0.001);
+    $("resultado").textContent = igual ? "Aplicado en el equipo." :
+      "El equipo ajustó algunos valores a sus límites. Revisa «En el equipo».";
+    envio = null;
+  }
+}
+
+// ================== ESTADO Y CONEXIÓN ==================
+function mostrarEstado(estado) {
+  const caja = $("estado");
+  caja.className = "estado" + (AYUDA_ESTADO[estado] ? " " + estado : "");
+  $("estadoTxt").textContent = estado ? "ESTADO: " + estado : "SIN DATOS";
+  $("estadoAyuda").textContent = AYUDA_ESTADO[estado] || "";
+}
+
+function actualizarConexion() {
+  const pill = $("conexion");
+  const hayDatos = ultimoMensaje && Date.now() - ultimoMensaje < SIN_DATOS_MS;
+  if (!cliente.connected)  { pill.textContent = "Sin conexión al broker"; pill.className = "pill mal"; }
+  else if (hayDatos)       { pill.textContent = "Conectado"; pill.className = "pill ok"; }
+  else                     { pill.textContent = "Sin datos del equipo"; pill.className = "pill aviso"; }
+  if (!hayDatos) $("btnVentilador").disabled = true;      // sin datos del equipo no se manda nada
+  if (cliente.connected && ultimoMensaje && !hayDatos) {
+    $("estado").className = "estado";
+    $("estadoTxt").textContent = "SIN DATOS";
+    $("estadoAyuda").textContent = "El equipo no envía datos. ¿Está encendido y con WiFi?";
+  }
+}
+setInterval(actualizarConexion, 1000);
+
+// ================== VENTILADOR ==================
+function mostrarValvula(d) {
+  const tarjeta = $("valvCard");
+  if (typeof d.valvula_cerrada !== "boolean") {              // equipo con versión anterior
+    $("valvEstado").textContent = "--"; $("valvNota").textContent = ""; return;
+  }
+  tarjeta.classList.toggle("cerrada", d.valvula_cerrada);
+  $("valvEstado").textContent = d.valvula_cerrada ? "Cerrada" : "Abierta";
+  $("valvNota").textContent = d.valvula_cerrada
+    ? (d.estado === "BLOQUEADO" ? "Sigue cerrada: hay que rearmarla en el equipo." : "Gas cortado por la alarma.")
+    : "Paso libre.";
+}
+
+function mostrarVentilador(d) {
+  const boton = $("btnVentilador");
+  if (typeof d.ventilador !== "boolean") {                   // equipo con versión anterior
+    $("ventEstado").textContent = "--"; boton.disabled = true; return;
+  }
+  ventiladorOn = d.ventilador;
+  const alarma = (d.estado === "ALARMA");
+  $("ventEstado").textContent = alarma ? "Encendido por la alarma" : (ventiladorOn ? "Encendido (manual)" : "Apagado");
+  $("ventNota").textContent = alarma ? "No se puede apagar mientras dure la alarma." : "";
+  boton.textContent = ventiladorOn ? "Apagar ventilador" : "Encender ventilador";
+  boton.disabled = alarma;
+  $("ventCard").classList.toggle("encendido", ventiladorOn);   // las aspas giran
+}
+
+$("btnVentilador").addEventListener("click", () => {
+  if (!cliente.connected) return;
+  cliente.publish(TEMA_CMD, JSON.stringify({ ventilador: !ventiladorOn }));   // la Pico lo lee con receive()
+  $("btnVentilador").disabled = true;                                         // se reactiva con el siguiente dato
+  $("ventNota").textContent = "Enviando...";
+});
+
+// ================== EVENTOS ==================
+// ================== HISTORIAL DE INCIDENTES ==================
+// Solo se registran las alarmas. La Pico manda en cada mensaje el "incidente" actual
+// (número, tipo, duración, pico y temperatura) y la web arma la tabla con eso.
+const CLAVE_HISTORIAL = "historial_" + BASE;     // se guarda en el navegador para no perderlo al recargar
+const MAX_INCIDENTES = 30;
+let historial = [];
+try { historial = JSON.parse(localStorage.getItem(CLAVE_HISTORIAL)) || []; } catch (e) { historial = []; }
+let filaActiva = historial.find(f => f.activo) || null;      // incidente que sigue en curso
+
+function actualizarHistorial(d) {
+  const inc = d.incidente;
+  let cambio = false;
+  if (d.estado === "ALARMA" && inc) {
+    if (!filaActiva) {                                       // empezó una alarma: fila nueva arriba
+      filaActiva = { n: inc.n, hora: horaActual(), activo: true };
+      historial.unshift(filaActiva);
+      if (historial.length > MAX_INCIDENTES) historial.pop();
+    }
+    copiarIncidente(filaActiva, inc);
+    cambio = true;
+  } else if (filaActiva) {                                   // terminó la alarma: se cierra la fila
+    if (inc && inc.n === filaActiva.n) copiarIncidente(filaActiva, inc);   // con los valores finales
+    filaActiva.activo = false; filaActiva = null;
+    cambio = true;
+  }
+  if (cambio) { guardarHistorial(); dibujarHistorial(); }
+}
+
+function copiarIncidente(fila, inc) {
+  fila.tipo = inc.tipo; fila.dur = inc.dur; fila.pico = inc.pico; fila.temp = inc.temp;
+}
+
+function guardarHistorial() {
+  try { localStorage.setItem(CLAVE_HISTORIAL, JSON.stringify(historial)); } catch (e) {}
+}
+
+function horaActual() {
+  return new Date().toLocaleString("es-PE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function duracion(seg) {
+  return seg >= 60 ? Math.floor(seg / 60) + " min " + String(seg % 60).padStart(2, "0") + " s" : seg + " s";
+}
+
+function celda(fila, contenido) {
+  const td = document.createElement("td");
+  td.append(contenido);
+  fila.append(td);
+  return td;
+}
+
+function dibujarHistorial() {
+  const cuerpo = $("cuerpoInc");
+  cuerpo.innerHTML = "";
+  historial.forEach(f => {
+    const tr = document.createElement("tr");
+    if (f.activo) tr.className = "curso";
+    celda(tr, String(f.n));
+    celda(tr, f.hora);
+    const tipo = celda(tr, "");
+    const etiqueta = document.createElement("span");
+    etiqueta.className = "chip " + (f.tipo === "G+H" ? "GH" : f.tipo);
+    etiqueta.textContent = f.tipo;
+    tipo.append(etiqueta);
+    if (f.activo) {
+      const curso = document.createElement("span");
+      curso.className = "chip CURSO"; curso.textContent = "EN CURSO";
+      tipo.append(curso);
+    }
+    celda(tr, duracion(f.dur));
+    celda(tr, esNum(f.pico) ? f.pico.toFixed(2) : "--");
+    celda(tr, esNum(f.temp) ? f.temp.toFixed(1) : "--");
+    cuerpo.append(tr);
+  });
+  $("vacioInc").style.display = historial.length ? "none" : "block";
+}
+
+$("btnBorrar").addEventListener("click", () => {
+  if (!historial.length || !confirm("¿Borrar el historial de incidentes de esta página?")) return;
+  historial = []; filaActiva = null;
+  guardarHistorial(); dibujarHistorial();
+});
+dibujarHistorial();
+
+// ================== VENTANA DE CONFIGURACIÓN ==================
+const dialogo = $("dlgConfig");
+$("btnConfig").addEventListener("click", () => {
+  if (config && !editado) CAMPOS.forEach(c => { $("in_" + c.clave).value = config[c.clave]; });  // valores vigentes
+  $("resultado").textContent = "";
+  dialogo.showModal();
+});
+$("btnCerrar").addEventListener("click", () => dialogo.close());
+dialogo.addEventListener("click", (e) => {                    // clic fuera de la ventana = cerrar
+  const r = dialogo.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dialogo.close();
+});
+
+// ================== FORMULARIO DE CONFIGURACIÓN ==================
+const form = $("formulario");
+CAMPOS.forEach(c => {
+  const fila = document.createElement("div");
+  fila.className = "fila";
+  fila.innerHTML =
+    '<label for="in_' + c.clave + '">' + c.etiqueta + " (" + c.unidad + ")</label>" +
+    '<span class="actual" id="actual_' + c.clave + '">En el equipo: --</span>' +
+    '<input type="number" id="in_' + c.clave + '" step="' + c.paso + '" min="' + c.min + '" max="' + c.max + '">';
+  form.append(fila);
+});
+form.insertAdjacentHTML("beforeend",
+  '<div class="botones"><button class="principal" type="submit">Enviar al equipo</button>' +
+  '<button type="button" id="defectos">Valores por defecto</button><span id="resultado" role="status"></span></div>');
+
+form.addEventListener("input", () => { editado = true; });
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const cmd = {};
+  CAMPOS.forEach(c => { cmd[c.clave] = parseFloat($("in_" + c.clave).value); });
+  if (Object.values(cmd).some(v => Number.isNaN(v))) { $("resultado").textContent = "Completa todos los campos."; return; }
+  editado = false;
+  enviar(cmd);
+});
+
+$("defectos").addEventListener("click", () => {
+  CAMPOS.forEach(c => { $("in_" + c.clave).value = DEFECTOS[c.clave]; });
+  editado = false;
+  enviar({ ...DEFECTOS });
+});
+
+function enviar(cmd) {
+  if (!cliente.connected) { $("resultado").textContent = "Sin conexión al broker."; return; }
+  cliente.publish(TEMA_CMD, JSON.stringify(cmd));          // la Pico lo lee con receive()
+  envio = { cmd, hora: Date.now() };
+  $("resultado").textContent = "Enviado. Esperando confirmación del equipo...";
+  setTimeout(() => { if (envio && envio.cmd === cmd) { $("resultado").textContent = "Sin respuesta del equipo."; envio = null; } }, 6000);
+}
+
+// ================== GRÁFICOS ==================
+function dibujarGraficos(d) {
+  const ug = typeof d.umbral_gas === "number" ? d.umbral_gas : 0;
+  const uh = typeof d.umbral_humo === "number" ? d.umbral_humo : 0;
+  const pico = Math.max(0, ...histGas.filter(esNum), ...histHumo.filter(esNum));
+  const vmax = Math.max(0.5, pico * 1.2, ug * 1.2, uh * 1.2);
+  dibujar($("graficoGH"),
+    [{ datos: histGas, color: "#3aa6d8" }, { datos: histHumo, color: "#a672d0" }],
+    0, vmax, [{ valor: ug, color: "#3aa6d8" }, { valor: uh, color: "#a672d0" }], 2);
+
+  const validos = histTemp.filter(esNum);
+  if (validos.length) {
+    let tmin = Math.min(...validos) - 1, tmax = Math.max(...validos) + 1;
+    if (tmax - tmin < 4) { const c = (tmax + tmin) / 2; tmin = c - 2; tmax = c + 2; }
+    dibujar($("graficoT"), [{ datos: histTemp, color: "#f08a3c" }], tmin, tmax, [], 1);
+  }
+}
+
+function dibujar(canvas, series, vmin, vmax, umbrales, decimales) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const g = canvas.getContext("2d");
+  g.scale(dpr, dpr);
+  const izq = 40, der = 12, arr = 12, aba = 20;            // márgenes del área de dibujo
+  const aw = w - izq - der, ah = h - arr - aba;
+  const y = (v) => arr + ah - ((v - vmin) / (vmax - vmin)) * ah;
+
+  g.font = "700 11px Nunito, system-ui, sans-serif"; g.fillStyle = "#8a7d9b"; g.strokeStyle = "#eee6f6"; g.lineWidth = 2;
+  for (let i = 0; i <= 4; i++) {                           // cuadrícula y números del eje
+    const v = vmin + (vmax - vmin) * i / 4, yy = Math.round(y(v)) + .5;
+    g.beginPath(); g.moveTo(izq, yy); g.lineTo(w - der, yy); g.stroke();
+    g.textAlign = "right"; g.fillText(v.toFixed(decimales), izq - 6, yy + 4);
+  }
+  g.textAlign = "left"; g.fillText("hace " + MAX_PUNTOS + " s", izq, h - 4);
+  g.textAlign = "right"; g.fillText("ahora", w - der, h - 4);
+
+  umbrales.forEach(u => {                                  // umbrales punteados
+    if (u.valor > vmin && u.valor < vmax) {
+      g.strokeStyle = u.color; g.lineWidth = 2; g.setLineDash([6, 5]); g.beginPath();
+      g.moveTo(izq, y(u.valor)); g.lineTo(w - der, y(u.valor)); g.stroke(); g.setLineDash([]);
+    }
+  });
+
+  series.forEach(s => {
+    const puntos = s.datos.map((v, i) => esNum(v)
+      ? { x: izq + aw * (MAX_PUNTOS - s.datos.length + i) / (MAX_PUNTOS - 1), y: y(v) } : null);
+    let tramo = [];
+    puntos.forEach(p => { if (p) tramo.push(p); else { trazar(tramo, s.color); tramo = []; } });
+    trazar(tramo, s.color);
+  });
+
+  function trazar(t, color) {                              // curva suave con relleno degradado
+    if (!t.length) return;
+    const ult = t[t.length - 1];
+    if (t.length > 1) {
+      g.beginPath(); g.moveTo(t[0].x, t[0].y);
+      for (let i = 1; i < t.length; i++) {
+        const mx = (t[i - 1].x + t[i].x) / 2, my = (t[i - 1].y + t[i].y) / 2;
+        g.quadraticCurveTo(t[i - 1].x, t[i - 1].y, mx, my);
+      }
+      g.lineTo(ult.x, ult.y);
+      g.strokeStyle = color; g.lineWidth = 3; g.lineCap = "round"; g.lineJoin = "round"; g.stroke();
+      g.lineTo(ult.x, arr + ah); g.lineTo(t[0].x, arr + ah); g.closePath();
+      const degradado = g.createLinearGradient(0, arr, 0, arr + ah);
+      degradado.addColorStop(0, color + "66"); degradado.addColorStop(1, color + "0a");
+      g.fillStyle = degradado; g.fill();
+    }
+    g.beginPath(); g.arc(ult.x, ult.y, 5, 0, Math.PI * 2);   // punto en el valor actual
+    g.fillStyle = "#fff"; g.fill(); g.strokeStyle = color; g.lineWidth = 3; g.stroke();
+  }
+}
+
+// ================== UTILIDADES ==================
+function esNum(v) { return typeof v === "number" && !Number.isNaN(v); }
+function num(v, dec) { return esNum(v) ? v.toFixed(dec) : "--"; }
+function push(lista, v) { lista.push(v); if (lista.length > MAX_PUNTOS) lista.shift(); }
+</script>
+<script>
+// ---- Instalar como app (PWA) ----
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+let eventoInstalar = null;
+const bloqueInstalar = document.getElementById("bloqueInstalar");
+const yaInstalada = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+if (!yaInstalada) {
+  if (esIOS) {
+    document.getElementById("txtInstalar").textContent = "En Safari: botón Compartir → Agregar a pantalla de inicio.";
+    document.getElementById("btnInstalar").hidden = true;
+    bloqueInstalar.hidden = false;
+  }
+  window.addEventListener("beforeinstallprompt", e => {
+    e.preventDefault(); eventoInstalar = e; bloqueInstalar.hidden = false;
+  });
+}
+document.getElementById("btnInstalar").addEventListener("click", async () => {
+  if (!eventoInstalar) return;
+  eventoInstalar.prompt(); await eventoInstalar.userChoice;
+  eventoInstalar = null; bloqueInstalar.hidden = true;
+});
+window.addEventListener("appinstalled", () => { bloqueInstalar.hidden = true; });
+
+</script>
+</body>
+</html>
