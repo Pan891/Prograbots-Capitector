@@ -1,6 +1,6 @@
 {
-  "name": "Detector de gas y humo",
-  "short_name": "Detector",
+  "name": "Capitector",
+  "short_name": "Capitector",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
